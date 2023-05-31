@@ -1,3 +1,10 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  @apply flex min-h-[100svh] w-full flex-col justify-center bg-slate-900 text-white text-2xl;
+}
+.pre {
+  @apply bg-red-400 bg-opacity-30  sm:bg-blue-400 sm:bg-opacity-30 md:bg-green-400  md:bg-opacity-30 lg:bg-cyan-400 lg:bg-opacity-30;
+}
