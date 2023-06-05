@@ -1,74 +1,153 @@
 import { type NextPage } from "next"
-import { useEffect, useRef, useState } from "react"
-// import Waveform from "~/components/Wavefrom"
+import { useRef, useState } from "react"
+
+import Waveform from "~/components/Waveform"
 // import useAudioContext from "~/hooks/useAudioContext"
 
-const log = true
-
-let audioContext: AudioContext
-let analyser: AnalyserNode
-let stream: MediaStream
-let source: MediaStreamAudioSourceNode
-const bufferArray: Uint8Array = new Uint8Array(2048)
-let frameId: number
+let animationController: number
 
 const Home: NextPage = () => {
-  const [buffer, setBuffer] = useState<number>(0)
+  const [start, setStart] = useState<boolean>(false)
+  const [oscillatorFrequency, setOscillatorFrequency] = useState<number>(0)
 
-  // Initialize audioContext
-  useEffect(() => {
-    if (audioContext || analyser) return
-    audioContext = new AudioContext()
-    analyser = audioContext.createAnalyser()
-    initAnalyserParams(analyser)
+  const audioContextRef = useRef<AudioContext | null>()
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const audioRef = useRef<HTMLMediaElement | null>(null)
+  const micSource = useRef<MediaStreamAudioSourceNode | null>(null)
+  const analyser = useRef<AnalyserNode | null>(null)
 
-    log && console.log(audioContext, analyser, "audioContext present")
+  const startMic = async () => {
+    audioContextRef.current = new AudioContext()
 
-    return () => {
-      if (audioContext)
-        audioContext
-          .close()
-          .then(() => console.log("audioContext closed"))
-          .catch(() => console.log("something went wrong"))
-    }
-  }, [])
+    if (!audioContextRef.current) return
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    micSource.current = audioContextRef.current.createMediaStreamSource(stream)
 
-  // Get Canvas
-  // todo
+    analyser.current = audioContextRef.current.createAnalyser()
+    micSource.current.connect(analyser.current)
 
-  // Start MicStream
-  const startStream = async (): Promise<void> => {
-    if (stream && source) return
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      source = audioContext.createMediaStreamSource(stream)
-      source.connect(analyser)
-      log && console.log("started", source, stream)
+    initAnalyserParams(analyser.current)
+    setStart(true)
 
-      if (audioContext && analyser) draw()
-      function draw(): void {
-        frameId = requestAnimationFrame(draw)
-        analyser.getByteTimeDomainData(bufferArray)
-        setBuffer(bufferArray.reduce((a, b) => a + b))
-        log && console.log(bufferArray.reduce((a, b) => a + b))
-      }
-    } catch (error) {
-      console.log(error)
-    }
+    // visualizeData()
+  }
 
-    return
+  const closeVisual = () => {
+    return cancelAnimationFrame(animationController)
+  }
+
+  // const visualizeData = () => {
+  //   if (!canvasRef.current || !analyser.current) return
+
+  //   const height = canvasRef.current.height
+  //   const width = canvasRef.current.width
+
+  //   animationController = window.requestAnimationFrame(visualizeData)
+
+  //   const buffer: Uint8Array = new Uint8Array(2048)
+  //   const bar_width = 3
+  //   let start = 0
+
+  //   analyser.current.getByteTimeDomainData(buffer)
+
+  //   const ctx = canvasRef.current.getContext("2d")
+  //   if (ctx == null) return
+
+  //   ctx.fillStyle = "rgb(200, 200, 200)"
+  //   ctx.fillRect(0, 0, width, height)
+
+  //   ctx.lineWidth = 2
+  //   ctx.strokeStyle = "rgb(0, 0, 0)"
+
+  //   ctx.beginPath()
+
+  //   // ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
+  //   let sliceWidth = (width * 1.0) / 2048
+  //   let x = 0
+
+  //   for (let i = 0; i < buffer.length; i++) {
+  //     let v = buffer[i]! / 128.0
+  //     let y = (v * height) / 2
+
+  //     if (i === 0) {
+  //       ctx.moveTo(x, y)
+  //     } else {
+  //       ctx.lineTo(x, y)
+  //     }
+
+  //     x += sliceWidth
+  //     ctx.fillRect(start, canvasRef.current.height, bar_width, -buffer[i]!)
+  //   }
+
+  //   ctx.lineTo(canvasRef.current.width, canvasRef.current.height / 2)
+  //   ctx.stroke()
+  // }
+
+  function playNote(hz: number): void {
+    if (!audioContextRef.current || !analyser.current) return
+
+    const oscillator = audioContextRef.current.createOscillator()
+    const gainNode = audioContextRef.current.createGain()
+    oscillator.frequency.setValueAtTime(
+      880,
+      audioContextRef.current.currentTime
+    )
+    gainNode.gain.value = 0.2
+    oscillator.connect(gainNode)
+    gainNode.connect(analyser.current)
+    oscillator.start()
   }
 
   return (
-    <div>
-      <h1>AudioContext</h1>
+    <div className="max-w-md mx-auto flex flex-col">
+      <h1 className="text-center">Audio stuff</h1>
+      <Waveform analyser={analyser.current} />
+
+      <div className="flex justify-evenly p-4">
+        <button
+          className="px-2 border-2 rounded-md"
+          onClick={() => void startMic()}
+        >
+          start mic
+        </button>
+        <button
+          className="px-2 border-2 rounded-md"
+          onClick={() => {
+            if (micSource.current != null) micSource.current.disconnect()
+          }}
+        >
+          stop mic
+        </button>
+      </div>
+
+      <div>
+        <button
+          className="px-2 border-2 rounded-md"
+          onClick={() => playNote(440)}
+        >
+          A
+        </button>
+        <input
+          min={440}
+          max={880}
+          step={5}
+          type="range"
+          onChange={(event) => {
+            console.log(oscillatorFrequency)
+            setOscillatorFrequency(+event.target.value)
+            playNote(oscillatorFrequency)
+          }}
+          value={oscillatorFrequency}
+        />
+      </div>
+
       <button
-        className="border-2 rounded-md p-2 text-lg"
-        onClick={void startStream}
+        onClick={() => {
+          console.log(canvasRef, audioRef, analyser)
+        }}
       >
-        Start Stream
+        checkRefs
       </button>
-      <p>{buffer}</p>
     </div>
   )
 }
